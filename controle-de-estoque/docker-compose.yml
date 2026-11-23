@@ -1,0 +1,52 @@
+name: controle-de-estoque
+
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: estoque_admin
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina no .env}
+      POSTGRES_DB: estoque
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?defina no .env}
+    volumes:
+      - ./docker/postgres:/docker-entrypoint-initdb.d:ro
+      - dados:/var/lib/postgresql
+    networks: [dados]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U estoque_admin -d estoque"]
+      interval: 2s
+      retries: 30
+
+  app:
+    build: { context: ., target: runtime }
+    environment:
+      NUXT_DATABASE_URL: postgres://estoque_app:${APP_DB_PASSWORD}@db:5432/estoque
+      NUXT_ESTRATEGIA_ESTOQUE: ${ESTRATEGIA_ESTOQUE:-condicional}
+    depends_on:
+      db: { condition: service_healthy }
+    ports: ["127.0.0.1:${APP_PORTA:-3010}:3000"]
+    networks: [dados, borda]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+
+  # docker compose --profile test run --rm test
+  test:
+    build: { context: ., target: deps }
+    profiles: [test]
+    command: ["npx", "vitest", "run"]
+    environment:
+      TEST_APP_URL: postgres://estoque_app:${APP_DB_PASSWORD}@db:5432/estoque
+      TEST_ADMIN_URL: postgres://estoque_admin:${POSTGRES_PASSWORD}@db:5432/estoque
+    depends_on:
+      db: { condition: service_healthy }
+    networks: [dados]
+
+networks:
+  # O banco só existe na rede interna, sem saída para fora e sem porta publicada.
+  dados: { internal: true }
+  borda: {}
+
+volumes:
+  dados:
