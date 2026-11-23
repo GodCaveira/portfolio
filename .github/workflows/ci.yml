@@ -1,0 +1,184 @@
+# CI do portfólio — descobre sozinho os projetos que existem e roda a mesma esteira em cada um.
+#
+# POR QUE DESCOBRIR EM VEZ DE LISTAR
+#
+# Hoje o repositório tem três pastas e nenhum código. Uma lista escrita à mão aqui (`controle-de-estoque`,
+# `site-de-assinaturas`, `atendimento-ia`) nasceria apontando para o nada, e o dia em que o projeto 4 aparecesse
+# alguém esqueceria de acrescentá-lo — e o CI passaria verde sem nunca testá-lo. Aqui a lista SAI do repositório:
+# toda pasta de primeiro nível com `package.json` entra na esteira. O projeto novo não precisa tocar neste arquivo.
+#
+# O PREÇO DISSO: o que o CI exige de cada projeto precisa estar escrito em algum lugar. Está no job `projetos`
+# (lockfile obrigatório, projeto coberto pelo Dependabot) e nos comentários dos passos abaixo.
+#
+# O mesmo desenho do CI do repositório Claude: o workflow SEMPRE dispara, quem pula é o job, e o `ci-ok` no fim é o
+# único check que a proteção de branch precisa exigir (job pulado conta como verde; job que falhou, não).
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Nega tudo no topo; cada job pede o mínimo.
+permissions: {}
+
+# PR novo no mesmo branch cancela a execução antiga. Em `main` nunca cancela.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CI: "true"
+  NPM_CONFIG_UPDATE_NOTIFIER: "false"
+
+jobs:
+  # ------------------------------------------------------------- descobrir projetos
+  projetos:
+    name: Descobrir projetos
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      matriz: ${{ steps.d.outputs.matriz }}
+      tem: ${{ steps.d.outputs.tem }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - id: d
+        run: |
+          shopt -s nullglob
+          projetos='[]'
+          falhou=0
+          for pkg in */package.json; do
+            dir="${pkg%/package.json}"
+
+            # Lockfile é OBRIGATÓRIO: sem ele, duas execuções do mesmo commit instalam versões diferentes,
+            # e "passou no CI" deixa de significar "este código passa".
+            if [ -f "$dir/pnpm-lock.yaml" ]; then pm=pnpm
+            elif [ -f "$dir/package-lock.json" ]; then pm=npm
+            else
+              echo "::error file=$pkg::$dir não tem pnpm-lock.yaml nem package-lock.json; o build não seria reprodutível."
+              falhou=1
+              continue
+            fi
+
+            # Projeto novo tem de entrar no Dependabot, senão as dependências dele envelhecem sem aviso.
+            # (Linhas comentadas não contam: o modelo comentado de `dependabot.yml` não pode enganar este teste.)
+            if ! grep -v '^[[:space:]]*#' .github/dependabot.yml | grep -q "/$dir"; then
+              echo "::error file=.github/dependabot.yml::$dir não está coberto pelo Dependabot; descomente e ajuste o bloco npm."
+              falhou=1
+            fi
+
+            projetos="$(jq -c --arg d "$dir" --arg pm "$pm" '. + [{dir: $d, pm: $pm}]' <<< "$projetos")"
+          done
+          echo "matriz=$projetos" >> "$GITHUB_OUTPUT"
+          echo "tem=$(jq 'length > 0' <<< "$projetos")" >> "$GITHUB_OUTPUT"
+          if [ "$projetos" = '[]' ]; then
+            echo "::notice::Nenhum projeto com package.json ainda; só o lint dos workflows roda."
+          fi
+          exit "$falhou"
+
+  # --------------------------------------------------------------- um job por projeto
+  projeto:
+    name: ${{ matrix.dir }}
+    needs: projetos
+    if: needs.projetos.outputs.tem == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false # um projeto quebrado não esconde o estado dos outros
+      matrix:
+        include: ${{ fromJSON(needs.projetos.outputs.matriz) }}
+    defaults:
+      run:
+        working-directory: ${{ matrix.dir }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # O pnpm lê a versão do campo `packageManager` do package.json do projeto (uma fonte só, igual na máquina do
+      # Djo e aqui). Projeto pnpm SEM esse campo falha aqui, de propósito: é o aviso de que falta declarar a versão.
+      - name: pnpm
+        if: matrix.pm == 'pnpm'
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          package_json_file: ${{ matrix.dir }}/package.json
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          cache: ${{ matrix.pm }}
+          cache-dependency-path: ${{ matrix.dir }}/${{ matrix.pm == 'pnpm' && 'pnpm-lock.yaml' || 'package-lock.json' }}
+
+      # Lock congelado: se package.json e lock divergem, FALHA em vez de "consertar" o lock em silêncio.
+      - name: Instalar (lock congelado)
+        run: |
+          if [ "$PM" = pnpm ]; then pnpm install --frozen-lockfile; else npm ci --no-audit --no-fund; fi
+        env:
+          PM: ${{ matrix.pm }}
+
+      # `--if-present`: o projeto roda o que declarou em `scripts`. Projeto sem `lint` não falha por não ter lint;
+      # mas um `test` declarado que falha, falha o job. A ordem vai do mais barato ao mais caro.
+      #
+      # AINDA NÃO HÁ SERVIÇO DE BANCO AQUI, e é de propósito: nenhum projeto tem teste que precise de PostgreSQL
+      # (nenhum tem código). Quando o primeiro teste de integração existir, o que ele precisa (um `services:
+      # postgres` ou o compose de teste do projeto) entra neste job, medido contra o teste real.
+      - name: lint, typecheck, test, build
+        run: |
+          for s in lint typecheck test build; do
+            echo "::group::$s"
+            if [ "$PM" = pnpm ]; then pnpm run --if-present "$s"; else npm run --if-present "$s"; fi
+            echo "::endgroup::"
+          done
+        env:
+          PM: ${{ matrix.pm }}
+
+  # ------------------------------------------------------------ lint dos workflows
+  workflows:
+    name: Lint dos workflows
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # actionlint: erro de sintaxe e de tipo. zizmor: erro de SEGURANÇA (injeção via `${{ }}`, permissão larga,
+      # action sem SHA). Imagem Docker com versão fixa, em vez de baixar binário sem verificação.
+      - name: actionlint
+        run: docker run --rm -v "$PWD:/repo:ro" -w /repo rhysd/actionlint:1.7.12 -color
+
+      - name: zizmor
+        uses: zizmorcore/zizmor-action@45d7276c9ca790aabd705e31ca99c6185c3e76dd # v0.8.1
+        with:
+          advanced-security: false
+          annotations: true
+
+  # --------------------------------------------------------------------- o portão
+  # `if: always()` é obrigatório: sem ele, um job que falha faz este ser `skipped`, e `skipped` conta como verde
+  # para a proteção de branch — o portão abriria justamente quando algo quebrou.
+  ci-ok:
+    name: ci-ok
+    if: always()
+    needs: [projetos, projeto, workflows]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Todos verdes (ou pulados de propósito)?
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.value.result)\t\(.key)"'
+          echo "$NEEDS" | jq -e 'all(.[]; .result == "success" or .result == "skipped")' > /dev/null

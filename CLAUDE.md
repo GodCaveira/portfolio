@@ -26,6 +26,7 @@ Três projetos pequenos para o portfólio do Djo, cada um provando uma habilidad
 - Projeto 3 usa modelo local com Ollama em servidor próprio (só CPU, modelo de cerca de 3B), por um adaptador. O nome exato do modelo fica para o projeto 3.
 - Projeto 1: o README compara atualização condicional atômica e bloqueio de linha, com teste de pedidos simultâneos que confirma exatamente 1 compra.
 - Ordem de construção: 1, depois 2, depois 3.
+- CI no GitHub Actions (`.github/`), copiado do repositório Claude: `ci.yml` descobre sozinho toda pasta de primeiro nível com `package.json` e roda lint, typecheck, test e build com lockfile congelado; `security.yml` roda gitleaks, trivy, revisão de dependências no PR e CodeQL (só quando houver JS/TS) e também por agenda semanal; `ci-ok` é o único check que a proteção de branch deve exigir. Actions fixadas por SHA, Dependabot semanal. Regras que o CI impõe a cada projeto: lockfile obrigatório, campo `packageManager` nos projetos pnpm e projeto listado no `dependabot.yml`. O workflow existe, mas ainda não há projeto para ele rodar. Segue como cópia: extrair para um repositório público `ci-templates` só quando houver um terceiro consumidor.
 
 ## Estrutura
 

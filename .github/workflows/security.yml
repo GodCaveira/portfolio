@@ -1,0 +1,137 @@
+# Segurança contínua do portfólio: segredo no código, dependência vulnerável, análise estática e revisão de
+# dependências em PR.
+#
+# POR QUE SEPARADO DO ci.yml
+#
+# O CI responde "este commit funciona?" e tem de ser determinístico. Segurança responde "o mundo mudou?": uma CVE
+# publicada hoje faz falhar um commit de três meses atrás. Misturar os dois faz um PR inocente quebrar por culpa de
+# um advisory que ele não tocou. Por isso este workflow também roda por AGENDA, sem commit nenhum.
+#
+# ESTE REPOSITÓRIO É PÚBLICO (regra 3 do CLAUDE.md): aqui entram CodeQL e a revisão de dependências, que são
+# gratuitos em repositório público e exigem plano pago em privado.
+
+name: Segurança
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "41 6 * * 1" # segunda-feira 06:41 UTC (03:41 em Brasília)
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # Mesmas versões do CI do repositório Claude (`page-server/scripts/verify.sh`).
+  GITLEAKS_IMAGE: zricethezav/gitleaks:v8.30.1
+  TRIVY_IMAGE: aquasec/trivy:0.76.1
+
+jobs:
+  # ------------------------------------------------------------------- segredos
+  gitleaks:
+    name: gitleaks (histórico + arquivos)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # histórico inteiro: segredo apagado no commit seguinte continua no histórico PÚBLICO
+          persist-credentials: false
+
+      # GIT_CONFIG_*: o container roda como root e o checkout é de outro usuário; sem isto o git de dentro recusa o
+      # diretório ("dubious ownership") e o gitleaks falha por motivo nenhum.
+      - name: gitleaks — histórico do git
+        run: |
+          docker run --rm -v "$PWD:/repo:ro" \
+            -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/repo \
+            "$GITLEAKS_IMAGE" git /repo --no-banner --redact --exit-code 1
+
+      - name: gitleaks — arquivos
+        run: |
+          docker run --rm -v "$PWD:/repo:ro" "$GITLEAKS_IMAGE" dir /repo --no-banner --redact --exit-code 1
+
+  # ----------------------------------------------------- dependências e configuração
+  trivy:
+    name: trivy fs
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Segredos já são cobertos pelo gitleaks; aqui são dependências (lockfile) e configuração (Dockerfile, Compose).
+      - name: trivy fs
+        run: |
+          docker run --rm -v "$PWD:/repo:ro" -w /repo "$TRIVY_IMAGE" fs . \
+            --timeout 20m --skip-dirs '**/node_modules' --skip-dirs '**/.nuxt' --skip-dirs '**/.output' \
+            --scanners vuln,misconfig --severity HIGH,CRITICAL --exit-code 1
+
+  # --------------------------------------------------- revisão de dependências no PR
+  # Olha só o que o PR ACRESCENTA ou ATUALIZA e barra vulnerabilidade alta antes de entrar. Complementa o trivy, que
+  # olha o estado atual: este é o portão de entrada; o trivy é o inventário.
+  dependency-review:
+    name: Revisão de dependências
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/dependency-review-action@bbc44d14a204704ccc493733616cd1e93a0321ec # v5.0.1
+        with:
+          fail-on-severity: high
+          comment-summary-in-pr: never # sem comentário no PR: dispensa `pull-requests: write`
+
+  # ------------------------------------------------------------ análise estática
+  # O CodeQL falha quando não encontra nenhum código para analisar. O repositório ainda não tem código, então o
+  # primeiro passo confere se há arquivo JS/TS; sem ele, o job passa avisando — e passa a analisar sozinho no
+  # primeiro commit de código, sem ninguém editar este arquivo.
+  #
+  # PARA FUNCIONAR, a "configuração padrão" do Code Scanning (Settings → Advanced Security) precisa estar DESLIGADA:
+  # as duas ao mesmo tempo fazem o upload do resultado ser recusado.
+  codeql:
+    name: CodeQL (JavaScript/TypeScript)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+      security-events: write # o resultado sobe para a aba Security → Code scanning
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - id: codigo
+        run: |
+          if [ -n "$(git ls-files '*.ts' '*.tsx' '*.js' '*.mjs' '*.cjs' | head -n 1)" ]; then
+            echo "tem=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "tem=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Nenhum arquivo JS/TS ainda; CodeQL pulado."
+          fi
+
+      - name: Inicializar o CodeQL
+        if: steps.codigo.outputs.tem == 'true'
+        uses: github/codeql-action/init@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
+        with:
+          languages: javascript-typescript
+          build-mode: none # JS/TS não precisa de build para ser analisado
+
+      - name: Analisar
+        if: steps.codigo.outputs.tem == 'true'
+        uses: github/codeql-action/analyze@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
+        with:
+          category: /language:javascript-typescript
