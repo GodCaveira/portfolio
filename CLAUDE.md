@@ -16,12 +16,14 @@ Três projetos pequenos para o portfólio do Djo, cada um provando uma habilidad
 ## Decisões já tomadas (resumo; a fonte é o livro)
 
 - Linguagem TypeScript estrito, framework Nuxt 4 com Nitro (tela e API no mesmo projeto), Zod em `shared/`.
-- PostgreSQL sempre, um usuário por aplicação.
+- PostgreSQL sempre, um usuário por aplicação, com Drizzle como ORM.
+- Cada pasta é um projeto independente, com package.json e docker-compose próprios.
+- Projeto 1 com painel completo, login e MFA (TOTP): escolha do Djo, contra a recomendação de uma tela mínima. O risco é o escopo de segurança atrasar o problema central, a concorrência.
 - Tudo em container, rede Docker segmentada.
 - Segurança padrão como parte da entrega: LGPD, MFA com TOTP (só em login de painel ou conta administrativa), testes de segurança, segredos fora do git, validação na fronteira, GRC, GSI, GDPR quando houver titular na UE, WAF. GPO não se aplica.
 - Bloqueio automático de IP malicioso e honeypot passivo (observa e registra, sem reação ofensiva).
 - Clean Architecture na proporção mínima e YAGNI.
-- Projeto 3 usa modelo local com Ollama, por um adaptador; modelo específico ainda a escolher.
+- Projeto 3 usa modelo local com Ollama em servidor próprio (só CPU, modelo de cerca de 3B), por um adaptador. O nome exato do modelo fica para o projeto 3.
 - Projeto 1: o README compara atualização condicional atômica e bloqueio de linha, com teste de pedidos simultâneos que confirma exatamente 1 compra.
 - Ordem de construção: 1, depois 2, depois 3.
 
@@ -35,4 +37,4 @@ atendimento-ia/        projeto 3: agente de IA integrado, base de respostas, rev
 
 ## Em aberto
 
-- Modelo do Ollama e a máquina onde ele roda.
+- Nome exato do modelo do Ollama (decidir ao chegar no projeto 3).
