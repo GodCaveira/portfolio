@@ -23,6 +23,24 @@ updates:
       actions:
         patterns: ["*"]
 
+  # ----------------------------------------------------------------------------- projeto 1: controle-de-estoque
+  - package-ecosystem: npm
+    directory: /controle-de-estoque
+    schedule: { interval: weekly, day: monday, time: "06:00", timezone: America/Sao_Paulo }
+    cooldown: { default-days: 7 }
+    groups:
+      minor-and-patch: { update-types: [minor, patch] }
+
+  - package-ecosystem: docker
+    directory: /controle-de-estoque
+    schedule: { interval: weekly, day: monday, time: "06:00", timezone: America/Sao_Paulo }
+    cooldown: { default-days: 7 }
+
+  - package-ecosystem: docker-compose
+    directory: /controle-de-estoque
+    schedule: { interval: weekly, day: monday, time: "06:00", timezone: America/Sao_Paulo }
+    cooldown: { default-days: 7 }
+
   # ---------------------------------------------------------------------------------------------------------
   # CADA PROJETO NOVO ENTRA AQUI, quando ganhar `package.json`. O `ci.yml` confere e FALHA se faltar (veja o job
   # `projetos`). Modelo, para copiar e ajustar o diretório (pnpm também usa o ecossistema `npm`):

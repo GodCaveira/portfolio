@@ -8,7 +8,8 @@
 # toda pasta de primeiro nível com `package.json` entra na esteira. O projeto novo não precisa tocar neste arquivo.
 #
 # O PREÇO DISSO: o que o CI exige de cada projeto precisa estar escrito em algum lugar. Está no job `projetos`
-# (lockfile obrigatório, projeto coberto pelo Dependabot) e nos comentários dos passos abaixo.
+# (lockfile obrigatório, projeto coberto pelo Dependabot, teste com banco pelo perfil `test` do compose) e nos
+# comentários dos passos abaixo.
 #
 # O mesmo desenho do CI do repositório Claude: o workflow SEMPRE dispara, quem pula é o job, e o `ci-ok` no fim é o
 # único check que a proteção de branch precisa exigir (job pulado conta como verde; job que falhou, não).
@@ -74,7 +75,14 @@ jobs:
               falhou=1
             fi
 
-            projetos="$(jq -c --arg d "$dir" --arg pm "$pm" '. + [{dir: $d, pm: $pm}]' <<< "$projetos")"
+            # Teste que precisa de banco roda pelo compose do PRÓPRIO projeto, com o mesmo PostgreSQL e o mesmo papel
+            # de banco que a aplicação usa. A convenção: um serviço no perfil `test` do docker-compose.yml.
+            teste=npm
+            if [ -f "$dir/docker-compose.yml" ] && grep -qE '^[[:space:]]*profiles:[[:space:]]*\[[[:space:]]*test[[:space:]]*\]' "$dir/docker-compose.yml"; then
+              teste=compose
+            fi
+
+            projetos="$(jq -c --arg d "$dir" --arg pm "$pm" --arg t "$teste" '. + [{dir: $d, pm: $pm, teste: $t}]' <<< "$projetos")"
           done
           echo "matriz=$projetos" >> "$GITHUB_OUTPUT"
           echo "tem=$(jq 'length > 0' <<< "$projetos")" >> "$GITHUB_OUTPUT"
@@ -128,18 +136,40 @@ jobs:
       # `--if-present`: o projeto roda o que declarou em `scripts`. Projeto sem `lint` não falha por não ter lint;
       # mas um `test` declarado que falha, falha o job. A ordem vai do mais barato ao mais caro.
       #
-      # AINDA NÃO HÁ SERVIÇO DE BANCO AQUI, e é de propósito: nenhum projeto tem teste que precise de PostgreSQL
-      # (nenhum tem código). Quando o primeiro teste de integração existir, o que ele precisa (um `services:
-      # postgres` ou o compose de teste do projeto) entra neste job, medido contra o teste real.
+      # Projeto com teste por compose (`matrix.teste == 'compose'`) pula o `test` daqui: ele roda no passo seguinte,
+      # com banco. Sem banco, o `npm test` dele falharia por falta de conexão, não por defeito no código.
       - name: lint, typecheck, test, build
         run: |
           for s in lint typecheck test build; do
+            if [ "$s" = test ] && [ "$TESTE" = compose ]; then continue; fi
             echo "::group::$s"
             if [ "$PM" = pnpm ]; then pnpm run --if-present "$s"; else npm run --if-present "$s"; fi
             echo "::endgroup::"
           done
         env:
           PM: ${{ matrix.pm }}
+          TESTE: ${{ matrix.teste }}
+
+      # O .env sai do .env.example: todo valor que começa com `troque-` vira um segredo aleatório desta execução,
+      # mascarado no log. Nenhuma senha fica no repositório nem nos secrets do GitHub.
+      - name: test (docker compose, perfil test)
+        if: matrix.teste == 'compose'
+        run: |
+          : > .env
+          while IFS= read -r linha || [ -n "$linha" ]; do
+            case "$linha" in
+              *=troque-*)
+                valor="$(openssl rand -hex 18)"
+                echo "::add-mask::$valor"
+                echo "${linha%%=*}=$valor" >> .env ;;
+              *) echo "$linha" >> .env ;;
+            esac
+          done < .env.example
+          docker compose --profile test run --rm --build test
+
+      - name: derrubar containers do teste
+        if: always() && matrix.teste == 'compose'
+        run: docker compose --profile test down -v --remove-orphans
 
   # ------------------------------------------------------------ lint dos workflows
   workflows:

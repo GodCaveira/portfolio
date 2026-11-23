@@ -9,7 +9,7 @@ Três projetos pequenos para o portfólio do Djo, cada um provando uma habilidad
 1. **Ler o livro antes de propor escopo.** Se não conseguir abrir o artefato, pare e avise o Djo. Não construa com base em memória ou suposição.
 2. **Regra de atualização:** a cada mudança (decisão tomada, peça ou conexão nova, mudança de estado), atualizar o livro publicado e este arquivo na mesma hora. Em divergência entre os dois, vale o livro.
 3. **Este repositório é público.** Antes de cada commit, conferir que não há segredo, dado real, IP ou nome de pessoa. Segredos ficam fora do git.
-4. **Nada aqui está implementado ainda.** Não descrever como existente o que é plano.
+4. **Não descrever como existente o que é plano.** Hoje só existe o núcleo de concorrência do projeto 1 (API, as duas técnicas e o teste). O painel do projeto 1 e os projetos 2 e 3 são plano.
 5. **Cada projeto tem README com três partes:** o que é, qual problema resolve e limitações conhecidas.
 6. **Dados de teste e demo sempre fictícios.**
 
@@ -17,6 +17,7 @@ Três projetos pequenos para o portfólio do Djo, cada um provando uma habilidad
 
 - Linguagem TypeScript estrito, framework Nuxt 4 com Nitro (tela e API no mesmo projeto), Zod em `shared/`.
 - PostgreSQL sempre, um usuário por aplicação, com Drizzle como ORM.
+- Tela, quando houver: Vue 3 com Tailwind e o design system de dashboard (sidebar escura, cards, acento verde).
 - Cada pasta é um projeto independente, com package.json e docker-compose próprios.
 - Projeto 1 com painel completo, login e MFA (TOTP): escolha do Djo, contra a recomendação de uma tela mínima. O risco é o escopo de segurança atrasar o problema central, a concorrência.
 - Tudo em container, rede Docker segmentada.
@@ -25,8 +26,9 @@ Três projetos pequenos para o portfólio do Djo, cada um provando uma habilidad
 - Clean Architecture na proporção mínima e YAGNI.
 - Projeto 3 usa modelo local com Ollama em servidor próprio (só CPU, modelo de cerca de 3B), por um adaptador. O nome exato do modelo fica para o projeto 3.
 - Projeto 1: o README compara atualização condicional atômica e bloqueio de linha, com teste de pedidos simultâneos que confirma exatamente 1 compra.
-- Ordem de construção: 1, depois 2, depois 3.
-- CI no GitHub Actions (`.github/`), copiado do repositório Claude: `ci.yml` descobre sozinho toda pasta de primeiro nível com `package.json` e roda lint, typecheck, test e build com lockfile congelado; `security.yml` roda gitleaks, trivy, revisão de dependências no PR e CodeQL (só quando houver JS/TS) e também por agenda semanal; `ci-ok` é o único check que a proteção de branch deve exigir. Actions fixadas por SHA, Dependabot semanal. Regras que o CI impõe a cada projeto: lockfile obrigatório, campo `packageManager` nos projetos pnpm e projeto listado no `dependabot.yml`. O workflow existe, mas ainda não há projeto para ele rodar. Segue como cópia: extrair para um repositório público `ci-templates` só quando houver um terceiro consumidor.
+- Ordem de construção: 1, depois 2, depois 3. Dentro do projeto 1: núcleo de concorrência, depois painel com login e MFA, depois camada de defesa.
+- Projeto 1: a API usa a atualização condicional por padrão (`ESTRATEGIA_ESTOQUE=bloqueio` troca a técnica). Esquema criado por script SQL na primeira subida do banco, sem drizzle-kit. TypeScript 5.9 (não 7, por causa do vue-tsc), postgres.js 3.4, npm. Porta local 3010.
+- CI no GitHub Actions (`.github/`), copiado do repositório Claude: `ci.yml` descobre sozinho toda pasta de primeiro nível com `package.json` e roda lint, typecheck, test e build com lockfile congelado; `security.yml` roda gitleaks, trivy, revisão de dependências no PR e CodeQL (só quando houver JS/TS) e também por agenda semanal; `ci-ok` é o único check que a proteção de branch deve exigir. Actions fixadas por SHA, Dependabot semanal. Regras que o CI impõe a cada projeto: lockfile obrigatório, campo `packageManager` nos projetos pnpm e projeto listado no `dependabot.yml`. Projeto cujo `docker-compose.yml` tem serviço no perfil `test` roda o teste por ele, com banco real; o `.env` do CI sai do `.env.example`, trocando cada valor `troque-...` por um segredo aleatório da execução. Segue como cópia: extrair para um repositório público `ci-templates` só quando houver um terceiro consumidor.
 
 ## Estrutura
 
