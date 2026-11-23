@@ -1,0 +1,57 @@
+# Dependabot — mantém atualizado o que o CI usa e o que os projetos usam.
+#
+# AS ACTIONS ESTÃO FIXADAS POR SHA DE COMMIT, não por tag: tag é mutável (quem controla o repositório da action pode
+# mover `v4` para um commit malicioso, e todo workflow com `@v4` passa a rodar esse código). SHA não se move. O preço é
+# que SHA não se atualiza sozinho; o Dependabot abre o PR e escreve o comentário `# vX.Y.Z` ao lado do SHA.
+#
+# `cooldown`: espera 7 dias antes de propor uma versão recém-publicada. A maioria dos pacotes maliciosos publicados em
+# ataques de cadeia de suprimentos é detectada e removida em dias.
+
+version: 2
+
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/Sao_Paulo
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # ----------------------------------------------------------------------------- projeto 1: controle-de-estoque
+  - package-ecosystem: npm
+    directory: /controle-de-estoque
+    schedule: { interval: weekly, day: monday, time: "06:00", timezone: America/Sao_Paulo }
+    cooldown: { default-days: 7 }
+    groups:
+      minor-and-patch: { update-types: [minor, patch] }
+
+  - package-ecosystem: docker
+    directory: /controle-de-estoque
+    schedule: { interval: weekly, day: monday, time: "06:00", timezone: America/Sao_Paulo }
+    cooldown: { default-days: 7 }
+
+  - package-ecosystem: docker-compose
+    directory: /controle-de-estoque
+    schedule: { interval: weekly, day: monday, time: "06:00", timezone: America/Sao_Paulo }
+    cooldown: { default-days: 7 }
+
+  # ---------------------------------------------------------------------------------------------------------
+  # CADA PROJETO NOVO ENTRA AQUI, quando ganhar `package.json`. O `ci.yml` confere e FALHA se faltar (veja o job
+  # `projetos`). Modelo, para copiar e ajustar o diretório (pnpm também usa o ecossistema `npm`):
+  #
+  #  - package-ecosystem: npm
+  #    directory: /controle-de-estoque
+  #    schedule: { interval: weekly, day: monday, time: "06:00", timezone: America/Sao_Paulo }
+  #    cooldown: { default-days: 7 }
+  #    groups:
+  #      minor-and-patch: { update-types: [minor, patch] }
+  #
+  # E, se o projeto tiver Dockerfile ou docker-compose.yml, um bloco `package-ecosystem: docker` (Dockerfile) e/ou
+  # `docker-compose` para as imagens base.
+  # ---------------------------------------------------------------------------------------------------------

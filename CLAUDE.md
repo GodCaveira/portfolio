@@ -28,6 +28,7 @@ Três projetos pequenos para o portfólio do Djo, cada um provando uma habilidad
 - Projeto 1: o README compara atualização condicional atômica e bloqueio de linha, com teste de pedidos simultâneos que confirma exatamente 1 compra.
 - Ordem de construção: 1, depois 2, depois 3. Dentro do projeto 1: núcleo de concorrência, depois painel com login e MFA, depois camada de defesa.
 - Projeto 1: a API usa a atualização condicional por padrão (`ESTRATEGIA_ESTOQUE=bloqueio` troca a técnica). Esquema criado por script SQL na primeira subida do banco, sem drizzle-kit. TypeScript 5.9 (não 7, por causa do vue-tsc), postgres.js 3.4, npm. Porta local 3010.
+- CI no GitHub Actions (`.github/`), copiado do repositório Claude: `ci.yml` descobre sozinho toda pasta de primeiro nível com `package.json` e roda lint, typecheck, test e build com lockfile congelado; `security.yml` roda gitleaks, trivy, revisão de dependências no PR e CodeQL (só quando houver JS/TS) e também por agenda semanal; `ci-ok` é o único check que a proteção de branch deve exigir. Actions fixadas por SHA, Dependabot semanal. Regras que o CI impõe a cada projeto: lockfile obrigatório, campo `packageManager` nos projetos pnpm e projeto listado no `dependabot.yml`. Projeto cujo `docker-compose.yml` tem serviço no perfil `test` roda o teste por ele, com banco real; o `.env` do CI sai do `.env.example`, trocando cada valor `troque-...` por um segredo aleatório da execução. Segue como cópia: extrair para um repositório público `ci-templates` só quando houver um terceiro consumidor.
 
 ## Estrutura
 
