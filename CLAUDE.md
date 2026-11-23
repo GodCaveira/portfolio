@@ -17,6 +17,7 @@ Três projetos pequenos para o portfólio do Djo, cada um provando uma habilidad
 
 - Linguagem TypeScript estrito, framework Nuxt 4 com Nitro (tela e API no mesmo projeto), Zod em `shared/`.
 - PostgreSQL sempre, um usuário por aplicação, com Drizzle como ORM.
+- Tela, quando houver: Vue 3 com Tailwind e o design system de dashboard (sidebar escura, cards, acento verde).
 - Cada pasta é um projeto independente, com package.json e docker-compose próprios.
 - Projeto 1 com painel completo, login e MFA (TOTP): escolha do Djo, contra a recomendação de uma tela mínima. O risco é o escopo de segurança atrasar o problema central, a concorrência.
 - Tudo em container, rede Docker segmentada.
