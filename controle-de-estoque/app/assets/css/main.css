@@ -1,0 +1,101 @@
+@import "tailwindcss";
+
+/* Tokens do design system de dashboard (sidebar escura, acento esmeralda), os mesmos dos outros painéis do autor.
+   Claro por padrão, escuro pela preferência do sistema; a barra lateral é escura nos dois. */
+:root {
+  --bg: #f8fafc;
+  --card: #ffffff;
+  --border: #e2e8f0;
+  --muted-bg: #f1f5f9;
+  --text: #0f172a;
+  --text-2: #64748b;
+  --accent: #10b981;
+  --accent-fg: #047857;
+  --on-accent: #052e22;
+  --ok-bg: #ecfdf5;
+  --ok-fg: #047857;
+  --warn-bg: #fffbeb;
+  --warn-fg: #b45309;
+  --neg-bg: #fef2f2;
+  --neg-fg: #b91c1c;
+  --side-bg: #0f172a;
+  --side-active: #1e293b;
+  --side-text: #94a3b8;
+  --side-text-hi: #e2e8f0;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b1120;
+    --card: #111a2e;
+    --border: #22304d;
+    --muted-bg: #17223a;
+    --text: #e6ebf4;
+    --text-2: #9aa8c0;
+    --accent: #34d399;
+    --accent-fg: #6ee7b7;
+    --ok-bg: #0b2a22;
+    --ok-fg: #6ee7b7;
+    --warn-bg: #2e2208;
+    --warn-fg: #fcd34d;
+    --neg-bg: #331215;
+    --neg-fg: #fca5a5;
+    --side-bg: #0a0f1d;
+    color-scheme: dark;
+  }
+}
+
+@theme inline {
+  --color-fundo: var(--bg);
+  --color-cartao: var(--card);
+  --color-borda: var(--border);
+  --color-suave: var(--muted-bg);
+  --color-texto: var(--text);
+  --color-texto-2: var(--text-2);
+  --color-acento: var(--accent);
+  --color-acento-texto: var(--accent-fg);
+  --color-sobre-acento: var(--on-accent);
+  --color-ok-fundo: var(--ok-bg);
+  --color-ok-texto: var(--ok-fg);
+  --color-aviso-fundo: var(--warn-bg);
+  --color-aviso-texto: var(--warn-fg);
+  --color-neg-fundo: var(--neg-bg);
+  --color-neg-texto: var(--neg-fg);
+  --color-lateral: var(--side-bg);
+  --color-lateral-ativo: var(--side-active);
+  --color-lateral-texto: var(--side-text);
+  --color-lateral-texto-forte: var(--side-text-hi);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+@layer base {
+  body {
+    @apply bg-fundo text-texto antialiased;
+    font-size: 15px;
+  }
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .cartao { @apply rounded-xl border border-borda bg-cartao p-5 shadow-xs; }
+  .rotulo { @apply mb-1 block text-sm font-medium; }
+  .campo {
+    @apply h-10 w-full rounded-lg border border-borda bg-cartao px-3 text-texto;
+    @apply focus:border-acento focus:outline-none;
+  }
+  .botao {
+    @apply inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-borda bg-cartao px-4 font-medium;
+    @apply cursor-pointer transition-colors hover:bg-suave disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .botao-primario { @apply border-acento bg-acento text-sobre-acento hover:bg-acento hover:brightness-95; }
+  .aviso-erro { @apply rounded-lg bg-neg-fundo px-3 py-2 text-sm text-neg-texto; }
+  .numeros { font-variant-numeric: tabular-nums; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition-duration: 0.01ms !important; }
+}

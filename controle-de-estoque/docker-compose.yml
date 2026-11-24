@@ -22,6 +22,9 @@ services:
     environment:
       NUXT_DATABASE_URL: postgres://estoque_app:${APP_DB_PASSWORD}@db:5432/estoque
       NUXT_ESTRATEGIA_ESTOQUE: ${ESTRATEGIA_ESTOQUE:-condicional}
+      NUXT_TOTP_CHAVE: ${TOTP_CHAVE:?defina no .env}
+      NUXT_ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      NUXT_ADMIN_SENHA: ${ADMIN_SENHA:-}
     depends_on:
       db: { condition: service_healthy }
     ports: ["127.0.0.1:${APP_PORTA:-3010}:3000"]
